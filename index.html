@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Weather forecast</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2a78d6">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Weather">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<style>
+  #map { height: 440px; border-radius: 8px; margin-top: 10px; background: #aad3df; }
+  .map-card { padding-bottom: 14px; }
+  .leaflet-popup-content { font-family: "Segoe UI", system-ui, sans-serif; font-size: 13px; }
+  .viz-root {
+    color-scheme: light;
+    --page: #f4f4f2; --surface-1: #fcfcfb; --border: #e2e1dc; --grid: #ebeae6;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #77766f;
+    --temp: #eb6834; --rain: #2a78d6; --accent: #2a78d6;
+    --tip-bg: #0b0b0b; --tip-fg: #fcfcfb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --page: #111110; --surface-1: #1a1a19; --border: #2e2d2b; --grid: #2a2a28;
+      --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+      --temp: #d95926; --rain: #3987e5; --accent: #3987e5;
+      --tip-bg: #f0efec; --tip-fg: #1a1a19;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; }
+  .viz-root { background: var(--page); color: var(--text-primary); min-height: 100vh; padding: 28px 20px 48px; }
+  .wrap { max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .sub { color: var(--text-secondary); font-size: 13px; }
+  form { display: flex; gap: 8px; margin: 16px 0 6px; flex-wrap: wrap; }
+  input[type=search] { flex: 1; min-width: 220px; font: inherit; font-size: 15px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); color: var(--text-primary); }
+  button { font: inherit; font-size: 15px; padding: 9px 18px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
+  .hint { font-size: 12px; color: var(--text-muted); }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin-top: 16px; }
+  .place { font-size: 20px; font-weight: 600; }
+  .now { display: flex; align-items: center; gap: 18px; margin-top: 10px; flex-wrap: wrap; }
+  .now .icon { font-size: 52px; line-height: 1; }
+  .now .temp { font-size: 44px; font-weight: 600; }
+  .days { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 700px) { .days { grid-template-columns: 1fr; } }
+  .day h2 { font-size: 15px; margin: 0; color: var(--text-secondary); font-weight: 600; }
+  .day .cond { display: flex; align-items: center; gap: 10px; margin: 8px 0 12px; font-size: 18px; font-weight: 600; }
+  .day .cond .icon { font-size: 34px; }
+  .day dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; font-size: 14px; }
+  .day dt { color: var(--text-secondary); }
+  .day dd { margin: 0; font-variant-numeric: tabular-nums; }
+  .advice { margin-top: 14px; font-size: 15px; }
+  .others { margin-top: 10px; font-size: 13px; color: var(--text-secondary); }
+  .others a { color: var(--accent); cursor: pointer; text-decoration: underline; margin-right: 10px; }
+  .err { color: #b3261e; margin-top: 16px; }
+  svg text { fill: var(--text-secondary); font-size: 11px; }
+  .gridline { stroke: var(--grid); stroke-width: 1; }
+  .axis { stroke: var(--text-muted); stroke-width: 1; }
+  .tip { position: fixed; pointer-events: none; background: var(--tip-bg); color: var(--tip-fg); font-size: 12px; padding: 6px 9px; border-radius: 6px; display: none; z-index: 10; line-height: 1.4; }
+  footer { margin-top: 18px; font-size: 12px; color: var(--text-muted); }
+  footer a { color: inherit; }
+  button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  #install { display: none; }
+  /* Phone layout */
+  @media (max-width: 600px) {
+    .viz-root { padding: calc(14px + env(safe-area-inset-top)) 12px calc(32px + env(safe-area-inset-bottom)); }
+    h1 { font-size: 21px; }
+    form { gap: 6px; }
+    input[type=search] { min-width: 0; flex-basis: 100%; font-size: 16px; padding: 11px 12px; }
+    form button { flex: 1; padding: 11px 10px; }
+    #map { height: 300px; }
+    .card { padding: 14px; margin-top: 12px; }
+    .now .icon { font-size: 44px; } .now .temp { font-size: 38px; }
+    .days { gap: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="viz-root">
+<div class="wrap">
+  <h1>Weather forecast</h1>
+  <div class="sub">Today and tomorrow for any city</div>
+  <form id="f">
+    <input type="search" id="city" placeholder="City, e.g. Malmö or Paris, US" autocomplete="off" required>
+    <button type="submit">Show weather</button>
+    <button type="button" class="secondary" id="locate" title="Weather where you are">📍 My location</button>
+    <button type="button" class="secondary" id="install">⬇ Install app</button>
+  </form>
+  <div class="hint">Add a country or country code to pick a specific place: <i>Lund, SE</i> · <i>Paris, US</i></div>
+  <div class="card map-card">
+    <div style="font-weight:600">Pick a place on the map</div>
+    <div class="sub">Tap or click anywhere in the world to see the weather there. Scroll or pinch to zoom.</div>
+    <div id="map"></div>
+  </div>
+  <div id="out"></div>
+  <footer>Weather: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (free, no API key). Map: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors; place names for map clicks from OpenStreetMap Nominatim. Only the city name or the clicked coordinates are sent.</footer>
+</div>
+<div class="tip" id="tip"></div>
+</div>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const WMO = {
+    0: ['Clear sky', '☀️'], 1: ['Mainly clear', '🌤️'], 2: ['Partly cloudy', '⛅'], 3: ['Overcast', '☁️'],
+    45: ['Fog', '🌫️'], 48: ['Freezing fog', '🌫️'],
+    51: ['Light drizzle', '🌦️'], 53: ['Drizzle', '🌦️'], 55: ['Heavy drizzle', '🌧️'], 56: ['Light freezing drizzle', '🌧️'], 57: ['Freezing drizzle', '🌧️'],
+    61: ['Light rain', '🌦️'], 63: ['Rain', '🌧️'], 65: ['Heavy rain', '🌧️'], 66: ['Light freezing rain', '🌧️'], 67: ['Freezing rain', '🌧️'],
+    71: ['Light snow', '🌨️'], 73: ['Snow', '🌨️'], 75: ['Heavy snow', '❄️'], 77: ['Snow grains', '🌨️'],
+    80: ['Light showers', '🌦️'], 81: ['Showers', '🌧️'], 82: ['Violent showers', '⛈️'], 85: ['Snow showers', '🌨️'], 86: ['Heavy snow showers', '❄️'],
+    95: ['Thunderstorm', '⛈️'], 96: ['Thunderstorm with hail', '⛈️'], 99: ['Severe thunderstorm with hail', '⛈️'],
+  };
+  const wmo = c => WMO[c] || ['Code ' + c, '🌡️'];
+  const dir = d => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round((d % 360) / 45) % 8];
+  const r1 = v => (Math.round(v * 10) / 10).toString();
+  const r0 = v => Math.round(v).toString();
+  const fmtDay = iso => new Date(iso + 'T12:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+
+  // Same lookup rules as the skill: prefer populated places (PPL*), retry in other languages
+  async function geocode(input) {
+    let name = input.trim(), country = null;
+    const m = name.match(/^(.+?),\s*(.+)$/);
+    if (m) { name = m[1].trim(); country = m[2].trim(); }
+    let fallback = [];
+    for (const lang of ['en', 'sv', 'de', 'fr', 'es', 'it', 'nl', 'pl']) {
+      const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?count=10&format=json&language=${lang}&name=${encodeURIComponent(name)}`);
+      if (!r.ok) throw new Error('Place lookup failed (' + r.status + ')');
+      let res = (await r.json()).results || [];
+      if (country) {
+        const c = country.toLowerCase();
+        res = res.filter(x => (x.country_code || '').toLowerCase() === c || (x.country || '').toLowerCase().startsWith(c));
+      }
+      if (!fallback.length) fallback = res;
+      const ppl = res.filter(x => (x.feature_code || '').startsWith('PPL'));
+      if (ppl.length) return ppl;
+    }
+    return fallback;
+  }
+
+  async function forecast(p) {
+    const u = `https://api.open-meteo.com/v1/forecast?latitude=${p.latitude}&longitude=${p.longitude}` +
+      '&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m' +
+      '&hourly=temperature_2m,precipitation' +
+      '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,sunrise,sunset' +
+      '&wind_speed_unit=ms&timezone=auto&forecast_days=2';
+    const r = await fetch(u);
+    if (!r.ok) throw new Error('Forecast failed (' + r.status + ')');
+    return r.json();
+  }
+
+  function advice(d) {
+    const rainy = [0, 1].some(i => d.precipitation_sum[i] >= 1 || d.precipitation_probability_max[i] >= 60);
+    const snow = [0, 1].some(i => [71, 73, 75, 77, 85, 86].includes(d.weather_code[i]));
+    const minT = Math.min(d.temperature_2m_min[0], d.temperature_2m_min[1]);
+    const maxT = Math.max(d.temperature_2m_max[0], d.temperature_2m_max[1]);
+    const gusts = Math.max(d.wind_gusts_10m_max[0], d.wind_gusts_10m_max[1]);
+    const parts = [];
+    if (snow) parts.push('snow is likely – wear good shoes');
+    else if (rainy) parts.push('bring an umbrella');
+    else parts.push('no umbrella needed');
+    if (minT <= 0) parts.push('it will freeze – dress warmly');
+    else if (maxT < 8) parts.push('wear a warm jacket');
+    else if (maxT < 16) parts.push('a light jacket is enough');
+    else if (maxT >= 25) parts.push('it will be warm – stay hydrated');
+    if (gusts >= 15) parts.push('windy, with strong gusts');
+    const s = parts.join(', ');
+    return s.charAt(0).toUpperCase() + s.slice(1) + '.';
+  }
+
+  function render(p, others, w) {
+    const c = w.current, d = w.daily, [cTxt, cIco] = wmo(c.weather_code);
+    const dayCard = (i, label) => {
+      const [t, ico] = wmo(d.weather_code[i]);
+      return `<div class="card day">
+        <h2>${label}, ${esc(fmtDay(d.time[i]))}</h2>
+        <div class="cond"><span class="icon" aria-hidden="true">${ico}</span>${esc(t)}</div>
+        <dl>
+          <dt>Temperature</dt><dd>${r0(d.temperature_2m_min[i])}–${r0(d.temperature_2m_max[i])} °C</dd>
+          <dt>Rain</dt><dd>${r1(d.precipitation_sum[i])} mm (${d.precipitation_probability_max[i] ?? '–'}% chance)</dd>
+          <dt>Wind</dt><dd>${dir(d.wind_direction_10m_dominant[i])}, up to ${r1(d.wind_speed_10m_max[i])} m/s, gusts ${r1(d.wind_gusts_10m_max[i])} m/s</dd>
+          <dt>Sun</dt><dd>↑ ${esc(d.sunrise[i].slice(11))} · ↓ ${esc(d.sunset[i].slice(11))}</dd>
+        </dl></div>`;
+    };
+    const where = [p.name, p.admin1 && p.admin1 !== p.name ? p.admin1 : null, p.country].filter(Boolean).join(', ');
+    $('out').innerHTML = `
+      <div class="card">
+        <div class="place">${esc(where)}</div>
+        <div class="sub">Local time ${esc(c.time.replace('T', ' '))} · ${esc(w.timezone)}</div>
+        <div class="now">
+          <span class="icon" aria-hidden="true">${cIco}</span>
+          <span class="temp">${r1(c.temperature_2m)} °C</span>
+          <span>${esc(cTxt)}<br><span class="sub">Feels like ${r1(c.apparent_temperature)} °C · wind ${r1(c.wind_speed_10m)} m/s</span></span>
+        </div>
+        <div class="advice">${esc(advice(d))}</div>
+        ${others.length ? `<div class="others">Meant another ${esc(p.name)}? ${others.map(o => `<a data-q="${esc(o.name + ', ' + (o.country_code || o.country))}" title="${esc([o.admin1, o.country].filter(Boolean).join(', '))}">${esc(o.name)}, ${esc(o.admin1 || '')} ${esc(o.country_code || '')}</a>`).join('')}</div>` : ''}
+      </div>
+      <div class="days">${dayCard(0, 'Today')}${dayCard(1, 'Tomorrow')}</div>
+      <div class="card">
+        <div style="font-weight:600">Next 48 hours</div>
+        <div class="sub">Temperature (°C) and rain (mm per hour). Hover for details.</div>
+        <div id="chartT" style="margin-top:10px"></div>
+        <div id="chartR"></div>
+      </div>`;
+    $('out').querySelectorAll('.others a').forEach(a => a.onclick = () => { $('city').value = a.dataset.q; run(a.dataset.q); });
+    charts(w);
+  }
+
+  // Two aligned charts (one axis each): temperature line, rain bars; shared crosshair + tooltip
+  function charts(w) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const mk = (tag, a, parent) => { const e = document.createElementNS(NS, tag); for (const k in a) e.setAttribute(k, a[k]); parent && parent.appendChild(e); return e; };
+    const times = w.hourly.time, T = w.hourly.temperature_2m, R = w.hourly.precipitation, n = times.length;
+    const W = 900, m = { l: 40, r: 12 }, x = i => m.l + (W - m.l - m.r) * i / (n - 1);
+    const nowIdx = Math.max(0, times.findIndex(t => t >= w.current.time.slice(0, 13) + ':00'));
+    const svgs = [];
+
+    // Temperature
+    const H1 = 190, t1 = 14, b1 = 22;
+    const tMin = Math.floor(Math.min(...T) - 1), tMax = Math.ceil(Math.max(...T) + 1);
+    const yT = v => t1 + (H1 - t1 - b1) * (tMax - v) / (tMax - tMin);
+    const s1 = mk('svg', { viewBox: `0 0 ${W} ${H1}`, width: '100%', role: 'img', 'aria-label': 'Hourly temperature for the next 48 hours' }, $('chartT'));
+    const step = (tMax - tMin) > 12 ? 4 : 2;
+    for (let v = Math.ceil(tMin / step) * step; v <= tMax; v += step) {
+      mk('line', { x1: m.l, x2: W - m.r, y1: yT(v), y2: yT(v), class: 'gridline' }, s1);
+      mk('text', { x: m.l - 6, y: yT(v) + 4, 'text-anchor': 'end' }, s1).textContent = v + '°';
+    }
+    if (tMin < 0 && tMax > 0) mk('line', { x1: m.l, x2: W - m.r, y1: yT(0), y2: yT(0), class: 'axis', 'stroke-dasharray': '3 3' }, s1);
+    times.forEach((t, i) => { if (t.endsWith('T00:00') && i > 0) { mk('line', { x1: x(i), x2: x(i), y1: t1, y2: H1 - b1, class: 'axis', 'stroke-dasharray': '2 4' }, s1); } });
+    times.forEach((t, i) => { if (i % 6 === 0) mk('text', { x: x(i), y: H1 - 6, 'text-anchor': 'middle' }, s1).textContent = t.slice(11, 13) === '00' ? fmtDay(t.slice(0, 10)) : t.slice(11, 16); });
+    mk('path', { d: T.map((v, i) => (i ? 'L' : 'M') + x(i) + ',' + yT(v)).join(' '), fill: 'none', stroke: 'var(--temp)', 'stroke-width': 2, 'stroke-linejoin': 'round' }, s1);
+    const iMax = T.indexOf(Math.max(...T)), iMin = T.indexOf(Math.min(...T));
+    [[iMax, -8], [iMin, 16]].forEach(([i, dy]) => mk('text', { x: x(i), y: yT(T[i]) + dy, 'text-anchor': 'middle', style: 'fill:var(--text-primary);font-weight:600' }, s1).textContent = r1(T[i]) + '°');
+    mk('circle', { cx: x(nowIdx), cy: yT(T[nowIdx]), r: 4.5, fill: 'var(--temp)', stroke: 'var(--surface-1)', 'stroke-width': 2 }, s1);
+    mk('text', { x: x(nowIdx) + 8, y: t1 + 2, style: 'fill:var(--text-muted);font-size:10px' }, s1).textContent = 'now';
+    mk('line', { x1: x(nowIdx), x2: x(nowIdx), y1: t1 - 6, y2: H1 - b1, class: 'axis', 'stroke-dasharray': '1 3' }, s1);
+    svgs.push({ svg: s1, top: t1, bottom: H1 - b1 });
+
+    // Rain
+    const H2 = 110, t2 = 8, b2 = 8;
+    const rMax = Math.max(1, Math.ceil(Math.max(...R)));
+    const yR = v => t2 + (H2 - t2 - b2) * (rMax - v) / rMax;
+    const s2 = mk('svg', { viewBox: `0 0 ${W} ${H2}`, width: '100%', role: 'img', 'aria-label': 'Hourly rain for the next 48 hours' }, $('chartR'));
+    [0, rMax / 2, rMax].forEach(v => { mk('line', { x1: m.l, x2: W - m.r, y1: yR(v), y2: yR(v), class: 'gridline' }, s2); mk('text', { x: m.l - 6, y: yR(v) + 4, 'text-anchor': 'end' }, s2).textContent = r1(v); });
+    mk('text', { x: m.l + 4, y: t2 + 10, style: 'fill:var(--text-muted);font-size:10px' }, s2).textContent = 'mm/h';
+    const bw = Math.max(2, (W - m.l - m.r) / n - 2);
+    R.forEach((v, i) => {
+      if (v <= 0) return;
+      const y0 = yR(0), y1 = yR(v), h = y0 - y1, rr = Math.min(2, h);
+      const x0 = x(i) - bw / 2;
+      mk('path', { d: `M${x0},${y0} V${y1 + rr} Q${x0},${y1} ${x0 + rr},${y1} H${x0 + bw - rr} Q${x0 + bw},${y1} ${x0 + bw},${y1 + rr} V${y0} Z`, fill: 'var(--rain)' }, s2);
+    });
+    mk('line', { x1: m.l, x2: W - m.r, y1: yR(0), y2: yR(0), class: 'axis' }, s2);
+    if (!R.some(v => v > 0)) mk('text', { x: W / 2, y: H2 / 2 + 4, 'text-anchor': 'middle', style: 'fill:var(--text-muted)' }, s2).textContent = 'No rain expected';
+    svgs.push({ svg: s2, top: t2, bottom: H2 - b2 });
+
+    // Crosshair + tooltip
+    const tip = $('tip');
+    const hairs = svgs.map(o => { const l = mk('line', { y1: o.top, y2: o.bottom, class: 'axis', visibility: 'hidden' }, o.svg); return l; });
+    const dot = mk('circle', { r: 4, fill: 'var(--temp)', stroke: 'var(--surface-1)', 'stroke-width': 2, visibility: 'hidden' }, s1);
+    svgs.forEach(o => {
+      const hit = mk('rect', { x: m.l, y: 0, width: W - m.l - m.r, height: o.svg.viewBox.baseVal.height, fill: 'transparent' }, o.svg);
+      hit.addEventListener('pointermove', e => {
+        const pt = o.svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+        const sx = pt.matrixTransform(o.svg.getScreenCTM().inverse()).x;
+        const i = Math.max(0, Math.min(n - 1, Math.round((sx - m.l) / (W - m.l - m.r) * (n - 1))));
+        hairs.forEach(h => { h.setAttribute('x1', x(i)); h.setAttribute('x2', x(i)); h.setAttribute('visibility', 'visible'); });
+        dot.setAttribute('cx', x(i)); dot.setAttribute('cy', yT(T[i])); dot.setAttribute('visibility', 'visible');
+        tip.innerHTML = `<b>${esc(fmtDay(times[i].slice(0, 10)))} ${esc(times[i].slice(11, 16))}</b><br>${r1(T[i])} °C · ${r1(R[i])} mm rain`;
+        tip.style.display = 'block';
+        const tw = tip.offsetWidth; let tx = e.clientX + 14; if (tx + tw > innerWidth - 8) tx = e.clientX - tw - 14;
+        tip.style.left = tx + 'px'; tip.style.top = (e.clientY + 14) + 'px';
+      });
+      hit.addEventListener('pointerleave', () => { tip.style.display = 'none'; hairs.forEach(h => h.setAttribute('visibility', 'hidden')); dot.setAttribute('visibility', 'hidden'); });
+    });
+  }
+
+  async function run(q, pan = true) {
+    $('out').innerHTML = '<div class="card sub">Loading…</div>';
+    try {
+      const hits = await geocode(q);
+      if (!hits.length) { $('out').innerHTML = `<div class="card err">No place called “${esc(q)}” was found. Check the spelling or add a country, e.g. <i>${esc(q)}, SE</i>.</div>`; return; }
+      await show(hits[0], hits.slice(1, 5), pan);
+      localStorage.setItem('wf-start', JSON.stringify({ city: q }));
+      history.replaceState(null, '', '?city=' + encodeURIComponent(q));
+    } catch (e) {
+      $('out').innerHTML = `<div class="card err">Could not load the weather: ${esc(e.message)}. Check your internet connection and try again.</div>`;
+    }
+  }
+
+  // Shared: fetch forecast for a place, render it and put a marker on the map
+  async function show(p, others, pan) {
+    const w = await forecast(p);
+    render(p, others, w);
+    document.title = 'Weather – ' + p.name;
+    setMarker(p, w, pan);
+  }
+
+  // ---- World map ----
+  let map = null, marker = null;
+  if (window.L) {
+    map = L.map('map', { worldCopyJump: true, minZoom: 1, maxBounds: [[-85, -Infinity], [85, Infinity]] }).setView([25, 10], 2);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+    map.on('click', e => runCoords(e.latlng.lat, L.Util.wrapNum(e.latlng.lng, [-180, 180], true), true));
+    setTimeout(() => map.invalidateSize(), 0);
+    if (location.protocol === 'file:') {
+      $('map').insertAdjacentHTML('beforebegin', '<div class="sub" style="margin-top:8px;color:#b3261e">Map shows “Access blocked”? OpenStreetMap needs the page to be served, not opened as a file. Double-click <b>Open weather map.cmd</b> in the same folder.</div>');
+    }
+  } else {
+    $('map').outerHTML = '<div class="sub" style="margin-top:10px">The map could not be loaded (no connection to unpkg.com). City search still works.</div>';
+  }
+
+  function setMarker(p, w, pan) {
+    if (!map) return;
+    const [t, ico] = wmo(w.current.weather_code);
+    const ll = [p.latitude, p.longitude];
+    if (!marker) marker = L.marker(ll).addTo(map); else marker.setLatLng(ll);
+    marker.bindPopup(`<b>${esc(p.name)}</b>${p.country ? ', ' + esc(p.country) : ''}<br>${ico} ${r1(w.current.temperature_2m)} °C · ${esc(t)}`).openPopup();
+    if (pan) map.setView(ll, Math.max(map.getZoom(), 5));
+  }
+
+  // Name for a clicked point: OpenStreetMap Nominatim reverse geocoding (city/town level)
+  async function reverseGeocode(lat, lon) {
+    const p = { name: `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`, admin1: null, country: null, country_code: null, latitude: lat, longitude: lon };
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=en&lat=${lat}&lon=${lon}`);
+      if (!r.ok) return p;
+      const j = await r.json();
+      if (j.error || !j.address) return p;   // e.g. open sea
+      const a = j.address;
+      p.name = a.city || a.town || a.village || a.municipality || a.hamlet || a.county || a.state || j.name || p.name;
+      p.admin1 = a.state || a.region || a.county || null;
+      p.country = a.country || null;
+      p.country_code = (a.country_code || '').toUpperCase() || null;
+    } catch (e) { /* keep coordinates as the name */ }
+    return p;
+  }
+
+  async function runCoords(lat, lon, scroll = false) {
+    $('out').innerHTML = '<div class="card sub">Loading…</div>';
+    try {
+      const p = await reverseGeocode(lat, lon);
+      $('city').value = p.country_code && !p.name.includes('°') ? `${p.name}, ${p.country_code}` : p.name;
+      await show(p, [], false);
+      localStorage.setItem('wf-start', JSON.stringify({ lat, lon }));
+      history.replaceState(null, '', `?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`);
+      if (scroll) $('out').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) {
+      $('out').innerHTML = `<div class="card err">Could not load the weather: ${esc(e.message)}. Check your internet connection and try again.</div>`;
+    }
+  }
+
+  $('f').onsubmit = e => { e.preventDefault(); const q = $('city').value.trim(); if (q) run(q); };
+
+  // Use my location (needs https or localhost)
+  $('locate').onclick = () => {
+    if (!navigator.geolocation) { alert('Location is not available in this browser.'); return; }
+    $('out').innerHTML = '<div class="card sub">Finding your location…</div>';
+    navigator.geolocation.getCurrentPosition(
+      pos => { runCoords(pos.coords.latitude, pos.coords.longitude, true); if (map) map.setView([pos.coords.latitude, pos.coords.longitude], 8); },
+      err => { $('out').innerHTML = `<div class="card err">Could not get your location (${esc(err.message)}). Allow location access for this app, or search for a city.</div>`; },
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 600000 });
+  };
+
+  // Install as an app (Android Chrome shows this prompt when the app is served over https)
+  let installPrompt = null;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; $('install').style.display = ''; });
+  $('install').onclick = async () => { if (!installPrompt) return; installPrompt.prompt(); await installPrompt.userChoice; installPrompt = null; $('install').style.display = 'none'; };
+  window.addEventListener('appinstalled', () => { $('install').style.display = 'none'; });
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+
+  // Start: ?city= or ?lat=&lon= in the URL, else the last choice, else Malmö
+  const qs = new URLSearchParams(location.search);
+  let saved = {}; try { saved = JSON.parse(localStorage.getItem('wf-start') || '{}'); } catch (e) {}
+  const lat = parseFloat(qs.get('lat') ?? saved.lat), lon = parseFloat(qs.get('lon') ?? saved.lon);
+  const city = qs.get('city') || (!qs.has('lat') && saved.city) || null;
+  if (city) { $('city').value = city; run(city, false); }
+  else if (!isNaN(lat) && !isNaN(lon)) runCoords(lat, lon);
+  else { $('city').value = 'Malmö'; run('Malmö', false); }
+})();
+</script>
+</body>
+</html>
