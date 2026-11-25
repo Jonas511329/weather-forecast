@@ -88,6 +88,12 @@
   footer a { color: inherit; }
   button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
   #install { display: none; }
+  /* Language switch */
+  .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .lang { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; flex-shrink: 0; }
+  .lang button { background: var(--surface-1); color: var(--text-secondary); border-radius: 0; font-size: 13px; padding: 6px 11px; font-weight: 600; }
+  .lang button + button { border-left: 1px solid var(--border); }
+  .lang button[aria-pressed="true"] { background: var(--accent); color: #fff; }
   .viz-root { padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); }
   /* iPhone / iPad install help (iOS has no install prompt) */
   .ios-help { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1000; background: var(--surface-1); color: var(--text-primary);
@@ -124,23 +130,33 @@
 <body>
 <div class="viz-root">
 <div class="wrap">
-  <h1>Weather forecast</h1>
-  <div class="sub">7-day forecast for any city</div>
+  <!-- Texts marked data-i18n* are filled in from the TEXT table in the script (English shown until it runs) -->
+  <div class="top">
+    <div>
+      <h1 data-i18n="title">Weather forecast</h1>
+      <div class="sub" data-i18n="subtitle">7-day forecast for any city</div>
+    </div>
+    <div class="lang" role="group" aria-label="Language / Språk / Idioma">
+      <button type="button" data-lang="en" title="English" lang="en">EN</button>
+      <button type="button" data-lang="sv" title="Svenska" lang="sv">SV</button>
+      <button type="button" data-lang="es" title="Español" lang="es">ES</button>
+    </div>
+  </div>
   <form id="f">
-    <input type="search" id="city" placeholder="City, e.g. Malmö or Paris, US" autocomplete="off" required>
-    <button type="submit">Show weather</button>
-    <button type="button" class="secondary" id="locate" title="Weather where you are">📍 My location</button>
-    <button type="button" class="secondary" id="install">⬇ Install app</button>
+    <input type="search" id="city" data-i18n-ph="placeholder" placeholder="City, e.g. Malmö or Paris, US" autocomplete="off" required>
+    <button type="submit" data-i18n="show">Show weather</button>
+    <button type="button" class="secondary" id="locate" data-i18n="locate" data-i18n-title="locateTitle" title="Weather where you are">📍 My location</button>
+    <button type="button" class="secondary" id="install" data-i18n="install">⬇ Install app</button>
   </form>
-  <div class="hint">Add a country or country code to pick a specific place: <i>Lund, SE</i> · <i>Paris, US</i></div>
+  <div class="hint" data-i18n-html="hint">Add a country or country code to pick a specific place: <i>Lund, SE</i> · <i>Paris, US</i></div>
   <div class="favs" id="favs"></div>
   <div class="card map-card">
-    <div style="font-weight:600">Pick a place on the map</div>
-    <div class="sub">Tap or click anywhere in the world to see the weather there. Scroll or pinch to zoom.</div>
+    <div style="font-weight:600" data-i18n="mapTitle">Pick a place on the map</div>
+    <div class="sub" data-i18n="mapSub">Tap or click anywhere in the world to see the weather there. Scroll or pinch to zoom.</div>
     <div id="map"></div>
   </div>
   <div id="out"></div>
-  <footer>Weather: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (free, no API key). Map tiles: <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a> (sources incl. © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors); place names for map clicks from OpenStreetMap Nominatim. Only the city name or the clicked coordinates are sent.</footer>
+  <footer data-i18n-html="footer">Weather: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (free, no API key). Map tiles: <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a> (sources incl. © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors); place names for map clicks from OpenStreetMap Nominatim. Only the city name or the clicked coordinates are sent.</footer>
 </div>
 <div class="tip" id="tip"></div>
 </div>
@@ -149,20 +165,164 @@
 (function () {
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const WMO = {
-    0: ['Clear sky', '☀️'], 1: ['Mainly clear', '🌤️'], 2: ['Partly cloudy', '⛅'], 3: ['Overcast', '☁️'],
-    45: ['Fog', '🌫️'], 48: ['Freezing fog', '🌫️'],
-    51: ['Light drizzle', '🌦️'], 53: ['Drizzle', '🌦️'], 55: ['Heavy drizzle', '🌧️'], 56: ['Light freezing drizzle', '🌧️'], 57: ['Freezing drizzle', '🌧️'],
-    61: ['Light rain', '🌦️'], 63: ['Rain', '🌧️'], 65: ['Heavy rain', '🌧️'], 66: ['Light freezing rain', '🌧️'], 67: ['Freezing rain', '🌧️'],
-    71: ['Light snow', '🌨️'], 73: ['Snow', '🌨️'], 75: ['Heavy snow', '❄️'], 77: ['Snow grains', '🌨️'],
-    80: ['Light showers', '🌦️'], 81: ['Showers', '🌧️'], 82: ['Violent showers', '⛈️'], 85: ['Snow showers', '🌨️'], 86: ['Heavy snow showers', '❄️'],
-    95: ['Thunderstorm', '⛈️'], 96: ['Thunderstorm with hail', '⛈️'], 99: ['Severe thunderstorm with hail', '⛈️'],
+  // ---- Languages: English, Swedish, Spanish ----
+  // Texts with {name} placeholders get values from t(key, {name: …}). Keys ending in Html contain markup.
+  const LINKS = {
+    om: '<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>',
+    esri: '<a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a>',
+    osm: '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'
   };
-  const wmo = c => WMO[c] || ['Code ' + c, '🌡️'];
-  const dir = d => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round((d % 360) / 45) % 8];
-  const r1 = v => (Math.round(v * 10) / 10).toString();
+  const TEXT = {
+    en: {
+      locale: 'en-GB', docTitle: 'Weather',
+      title: 'Weather forecast', subtitle: '7-day forecast for any city',
+      placeholder: 'City, e.g. Malmö or Paris, US', show: 'Show weather',
+      locate: '📍 My location', locateTitle: 'Weather where you are', install: '⬇ Install app',
+      hint: 'Add a country or country code to pick a specific place: <i>Lund, SE</i> · <i>Paris, US</i>',
+      mapTitle: 'Pick a place on the map', mapSub: 'Tap or click anywhere in the world to see the weather there. Scroll or pinch to zoom.',
+      mapFail: 'The map could not be loaded (no connection to unpkg.com). City search still works.',
+      footer: `Weather: ${LINKS.om} (free, no API key). Map tiles: ${LINKS.esri} (sources incl. © ${LINKS.osm} contributors); place names for map clicks from OpenStreetMap Nominatim. Only the city name or the clicked coordinates are sent.`,
+      loading: 'Loading…', locating: 'Finding your location…',
+      notFoundHtml: 'No place called “{q}” was found. Check the spelling or add a country, e.g. <i>{q}, SE</i>.',
+      loadErr: 'Could not load the weather: {m}. Check your internet connection and try again.',
+      geoNone: 'Location is not available in this browser.',
+      geoErr: 'Could not get your location ({m}). Allow location access for this app, or search for a city.',
+      localTime: 'Local time', feels: 'Feels like {t} °C · wind {w} m/s', meantAnother: 'Meant another {n}?',
+      week: '7-day forecast', weekSub: 'Rain: total mm and highest chance. Wind: strongest of the day.',
+      today: 'Today', tomorrow: 'Tomorrow', noRain: 'No rain', gusts: 'gusts', range: '{a} to {b} °C',
+      next48: 'Next 48 hours', next48Sub: 'Temperature (°C) and rain (mm per hour). Hover for details.',
+      now: 'now', noRainExpected: 'No rain expected', tipRain: '{mm} mm rain',
+      ariaTemp: 'Hourly temperature for the next 48 hours', ariaRain: 'Hourly rain for the next 48 hours',
+      favTipHtml: 'Tip: tap <b>☆ Save</b> next to a place name to keep it here – up to {n} favourites.',
+      favLabel: '★ Favourites', favShow: 'Show the weather in {x}', favRemove: 'Remove {x} from favourites',
+      saved: '★ Saved', save: '☆ Save', unsaveTitle: 'Remove from favourites', saveTitle: 'Save as a favourite',
+      fullTitle: 'You have {n} favourites – remove one (×) to save this place',
+      fullAlert: 'You can save up to {n} favourites. Remove one with × first.',
+      adv: { snow: 'snow is likely – wear good shoes', umbrella: 'bring an umbrella', noUmbrella: 'no umbrella needed',
+             freeze: 'it will freeze – dress warmly', warmJacket: 'wear a warm jacket', lightJacket: 'a light jacket is enough',
+             hot: 'it will be warm – stay hydrated', windy: 'windy, with strong gusts' },
+      iosTitle: 'Install Weather on your {d}', share: 'Share ⬆︎',
+      iosShareTopHtml: 'Tap the {share} button at the top right of Safari.',
+      iosShareBottomHtml: 'Tap the {share} button at the bottom of Safari.',
+      iosStep2Html: 'Scroll down and tap <b>Add to Home Screen</b>.',
+      iosStep3Html: 'Tap <b>Add</b>. The Weather app appears on your home screen.',
+      iosOpenSafariHtml: 'Open this page in <b>Safari</b> (copy the address, or tap ⋯ → <i>Open in Safari</i>).',
+      iosShareThenAddHtml: 'Tap {share}, then <b>Add to Home Screen</b>.', iosAddHtml: 'Tap <b>Add</b>.',
+      dirs: ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'],
+      wmo: { 0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast', 45: 'Fog', 48: 'Freezing fog',
+             51: 'Light drizzle', 53: 'Drizzle', 55: 'Heavy drizzle', 56: 'Light freezing drizzle', 57: 'Freezing drizzle',
+             61: 'Light rain', 63: 'Rain', 65: 'Heavy rain', 66: 'Light freezing rain', 67: 'Freezing rain',
+             71: 'Light snow', 73: 'Snow', 75: 'Heavy snow', 77: 'Snow grains',
+             80: 'Light showers', 81: 'Showers', 82: 'Violent showers', 85: 'Snow showers', 86: 'Heavy snow showers',
+             95: 'Thunderstorm', 96: 'Thunderstorm with hail', 99: 'Severe thunderstorm with hail', other: 'Code {c}' }
+    },
+    sv: {
+      locale: 'sv-SE', docTitle: 'Väder',
+      title: 'Väderprognos', subtitle: '7-dygnsprognos för valfri ort',
+      placeholder: 'Ort, t.ex. Malmö eller Paris, US', show: 'Visa väder',
+      locate: '📍 Min plats', locateTitle: 'Vädret där du är', install: '⬇ Installera appen',
+      hint: 'Lägg till land eller landskod för att välja en viss ort: <i>Lund, SE</i> · <i>Paris, US</i>',
+      mapTitle: 'Välj en plats på kartan', mapSub: 'Tryck eller klicka var som helst i världen för att se vädret där. Scrolla eller nyp för att zooma.',
+      mapFail: 'Kartan kunde inte laddas (ingen anslutning till unpkg.com). Sökning på ort fungerar ändå.',
+      footer: `Väder: ${LINKS.om} (gratis, ingen API-nyckel). Kartbilder: ${LINKS.esri} (källor bl.a. © ${LINKS.osm}-bidragsgivare); ortnamn vid klick på kartan från OpenStreetMap Nominatim. Endast ortnamnet eller de klickade koordinaterna skickas.`,
+      loading: 'Laddar…', locating: 'Söker din plats…',
+      notFoundHtml: 'Ingen plats som heter ”{q}” hittades. Kontrollera stavningen eller lägg till ett land, t.ex. <i>{q}, SE</i>.',
+      loadErr: 'Kunde inte hämta vädret: {m}. Kontrollera internetanslutningen och försök igen.',
+      geoNone: 'Platstjänster finns inte i den här webbläsaren.',
+      geoErr: 'Kunde inte hitta din plats ({m}). Tillåt platsåtkomst för appen eller sök efter en ort.',
+      localTime: 'Lokal tid', feels: 'Känns som {t} °C · vind {w} m/s', meantAnother: 'Menade du ett annat {n}?',
+      week: '7-dygnsprognos', weekSub: 'Regn: totalt i mm och högsta risk. Vind: dagens starkaste.',
+      today: 'Idag', tomorrow: 'Imorgon', noRain: 'Inget regn', gusts: 'byar', range: '{a} till {b} °C',
+      next48: 'Kommande 48 timmar', next48Sub: 'Temperatur (°C) och regn (mm per timme). Håll pekaren över för detaljer.',
+      now: 'nu', noRainExpected: 'Inget regn väntas', tipRain: '{mm} mm regn',
+      ariaTemp: 'Temperatur per timme de kommande 48 timmarna', ariaRain: 'Regn per timme de kommande 48 timmarna',
+      favTipHtml: 'Tips: tryck på <b>☆ Spara</b> bredvid ett ortnamn för att spara orten här – upp till {n} favoriter.',
+      favLabel: '★ Favoriter', favShow: 'Visa vädret i {x}', favRemove: 'Ta bort {x} från favoriter',
+      saved: '★ Sparad', save: '☆ Spara', unsaveTitle: 'Ta bort från favoriter', saveTitle: 'Spara som favorit',
+      fullTitle: 'Du har {n} favoriter – ta bort en (×) för att spara den här platsen',
+      fullAlert: 'Du kan spara upp till {n} favoriter. Ta bort en med × först.',
+      adv: { snow: 'snö är troligt – ha bra skor', umbrella: 'ta med paraply', noUmbrella: 'inget paraply behövs',
+             freeze: 'det blir minusgrader – klä dig varmt', warmJacket: 'ta på dig en varm jacka', lightJacket: 'en tunn jacka räcker',
+             hot: 'det blir varmt – drick ordentligt', windy: 'blåsigt med kraftiga byar' },
+      iosTitle: 'Installera Väder på din {d}', share: 'Dela ⬆︎',
+      iosShareTopHtml: 'Tryck på knappen {share} uppe till höger i Safari.',
+      iosShareBottomHtml: 'Tryck på knappen {share} längst ned i Safari.',
+      iosStep2Html: 'Scrolla ned och tryck på <b>Lägg till på hemskärmen</b>.',
+      iosStep3Html: 'Tryck på <b>Lägg till</b>. Väderappen visas på hemskärmen.',
+      iosOpenSafariHtml: 'Öppna sidan i <b>Safari</b> (kopiera adressen, eller tryck ⋯ → <i>Öppna i Safari</i>).',
+      iosShareThenAddHtml: 'Tryck på {share} och sedan <b>Lägg till på hemskärmen</b>.', iosAddHtml: 'Tryck på <b>Lägg till</b>.',
+      dirs: ['N', 'NO', 'O', 'SO', 'S', 'SV', 'V', 'NV'],
+      wmo: { 0: 'Klart', 1: 'Mestadels klart', 2: 'Halvklart', 3: 'Mulet', 45: 'Dimma', 48: 'Underkyld dimma',
+             51: 'Lätt duggregn', 53: 'Duggregn', 55: 'Kraftigt duggregn', 56: 'Lätt underkylt duggregn', 57: 'Underkylt duggregn',
+             61: 'Lätt regn', 63: 'Regn', 65: 'Kraftigt regn', 66: 'Lätt underkylt regn', 67: 'Underkylt regn',
+             71: 'Lätt snöfall', 73: 'Snöfall', 75: 'Kraftigt snöfall', 77: 'Snökorn',
+             80: 'Lätta regnskurar', 81: 'Regnskurar', 82: 'Kraftiga regnskurar', 85: 'Snöbyar', 86: 'Kraftiga snöbyar',
+             95: 'Åska', 96: 'Åska med hagel', 99: 'Kraftig åska med hagel', other: 'Kod {c}' }
+    },
+    es: {
+      locale: 'es-ES', docTitle: 'El tiempo',
+      title: 'Pronóstico del tiempo', subtitle: 'Pronóstico de 7 días para cualquier ciudad',
+      placeholder: 'Ciudad, p. ej. Malmö o París, US', show: 'Ver el tiempo',
+      locate: '📍 Mi ubicación', locateTitle: 'El tiempo donde estás', install: '⬇ Instalar app',
+      hint: 'Añade un país o código de país para elegir un lugar concreto: <i>Lund, SE</i> · <i>Paris, US</i>',
+      mapTitle: 'Elige un lugar en el mapa', mapSub: 'Toca o haz clic en cualquier lugar del mundo para ver el tiempo allí. Desplázate o pellizca para hacer zoom.',
+      mapFail: 'No se pudo cargar el mapa (sin conexión con unpkg.com). La búsqueda por ciudad sigue funcionando.',
+      footer: `Tiempo: ${LINKS.om} (gratis, sin clave de API). Mapa: ${LINKS.esri} (fuentes incl. © colaboradores de ${LINKS.osm}); nombres de lugares al pulsar en el mapa de OpenStreetMap Nominatim. Solo se envía el nombre de la ciudad o las coordenadas pulsadas.`,
+      loading: 'Cargando…', locating: 'Buscando tu ubicación…',
+      notFoundHtml: 'No se encontró ningún lugar llamado «{q}». Revisa la ortografía o añade un país, p. ej. <i>{q}, SE</i>.',
+      loadErr: 'No se pudo cargar el tiempo: {m}. Comprueba tu conexión a internet e inténtalo de nuevo.',
+      geoNone: 'La ubicación no está disponible en este navegador.',
+      geoErr: 'No se pudo obtener tu ubicación ({m}). Permite el acceso a la ubicación para esta app o busca una ciudad.',
+      localTime: 'Hora local', feels: 'Sensación de {t} °C · viento {w} m/s', meantAnother: '¿Buscabas otro {n}?',
+      week: 'Pronóstico de 7 días', weekSub: 'Lluvia: total en mm y probabilidad máxima. Viento: el más fuerte del día.',
+      today: 'Hoy', tomorrow: 'Mañana', noRain: 'Sin lluvia', gusts: 'ráfagas', range: '{a} a {b} °C',
+      next48: 'Próximas 48 horas', next48Sub: 'Temperatura (°C) y lluvia (mm por hora). Pasa el cursor para ver detalles.',
+      now: 'ahora', noRainExpected: 'No se espera lluvia', tipRain: '{mm} mm de lluvia',
+      ariaTemp: 'Temperatura por hora en las próximas 48 horas', ariaRain: 'Lluvia por hora en las próximas 48 horas',
+      favTipHtml: 'Consejo: toca <b>☆ Guardar</b> junto al nombre de un lugar para tenerlo aquí – hasta {n} favoritos.',
+      favLabel: '★ Favoritos', favShow: 'Ver el tiempo en {x}', favRemove: 'Quitar {x} de favoritos',
+      saved: '★ Guardado', save: '☆ Guardar', unsaveTitle: 'Quitar de favoritos', saveTitle: 'Guardar como favorito',
+      fullTitle: 'Tienes {n} favoritos: quita uno (×) para guardar este lugar',
+      fullAlert: 'Puedes guardar hasta {n} favoritos. Quita uno con × primero.',
+      adv: { snow: 'es probable que nieve: lleva buen calzado', umbrella: 'lleva paraguas', noUmbrella: 'no hace falta paraguas',
+             freeze: 'va a helar: abrígate bien', warmJacket: 'ponte una chaqueta de abrigo', lightJacket: 'basta con una chaqueta ligera',
+             hot: 'hará calor: mantente hidratado', windy: 'viento con ráfagas fuertes' },
+      iosTitle: 'Instala El tiempo en tu {d}', share: 'Compartir ⬆︎',
+      iosShareTopHtml: 'Toca el botón {share} arriba a la derecha en Safari.',
+      iosShareBottomHtml: 'Toca el botón {share} en la parte inferior de Safari.',
+      iosStep2Html: 'Desplázate hacia abajo y toca <b>Añadir a pantalla de inicio</b>.',
+      iosStep3Html: 'Toca <b>Añadir</b>. La app del tiempo aparecerá en tu pantalla de inicio.',
+      iosOpenSafariHtml: 'Abre esta página en <b>Safari</b> (copia la dirección o toca ⋯ → <i>Abrir en Safari</i>).',
+      iosShareThenAddHtml: 'Toca {share} y luego <b>Añadir a pantalla de inicio</b>.', iosAddHtml: 'Toca <b>Añadir</b>.',
+      dirs: ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'],
+      wmo: { 0: 'Despejado', 1: 'Mayormente despejado', 2: 'Parcialmente nublado', 3: 'Cubierto', 45: 'Niebla', 48: 'Niebla helada',
+             51: 'Llovizna ligera', 53: 'Llovizna', 55: 'Llovizna intensa', 56: 'Llovizna helada ligera', 57: 'Llovizna helada',
+             61: 'Lluvia ligera', 63: 'Lluvia', 65: 'Lluvia intensa', 66: 'Lluvia helada ligera', 67: 'Lluvia helada',
+             71: 'Nevada ligera', 73: 'Nieve', 75: 'Nevada intensa', 77: 'Granos de nieve',
+             80: 'Chubascos ligeros', 81: 'Chubascos', 82: 'Chubascos violentos', 85: 'Chubascos de nieve', 86: 'Chubascos de nieve intensos',
+             95: 'Tormenta', 96: 'Tormenta con granizo', 99: 'Tormenta fuerte con granizo', other: 'Código {c}' }
+    }
+  };
+  const LANGS = Object.keys(TEXT);
+  // Saved choice, else the phone/browser language, else English
+  let lang = localStorage.getItem('wf-lang');
+  if (!LANGS.includes(lang)) lang = (navigator.languages || [navigator.language || 'en']).map(l => String(l).slice(0, 2).toLowerCase()).find(l => LANGS.includes(l)) || 'en';
+  const L10N = () => TEXT[lang];
+  // t('key', {a: 1}) – replaces {a}. Values are inserted as given: escape them first when the text is used as HTML.
+  const t = (key, vars = {}) => String(L10N()[key] ?? TEXT.en[key] ?? key).replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
+
+  const ICON = {
+    0: '☀️', 1: '🌤️', 2: '⛅', 3: '☁️', 45: '🌫️', 48: '🌫️',
+    51: '🌦️', 53: '🌦️', 55: '🌧️', 56: '🌧️', 57: '🌧️', 61: '🌦️', 63: '🌧️', 65: '🌧️', 66: '🌧️', 67: '🌧️',
+    71: '🌨️', 73: '🌨️', 75: '❄️', 77: '🌨️', 80: '🌦️', 81: '🌧️', 82: '⛈️', 85: '🌨️', 86: '❄️', 95: '⛈️', 96: '⛈️', 99: '⛈️'
+  };
+  const wmo = c => [L10N().wmo[c] ?? L10N().wmo.other.replace('{c}', c), ICON[c] || '🌡️'];
+  const dir = d => L10N().dirs[Math.round((d % 360) / 45) % 8];
+  const r1 = v => (Math.round(v * 10) / 10).toLocaleString(L10N().locale);
   const r0 = v => Math.round(v).toString();
-  const fmtDay = iso => new Date(iso + 'T12:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  const date = (iso, opts) => new Date(iso + 'T12:00').toLocaleDateString(L10N().locale, opts);
+  const fmtDay = iso => date(iso, { weekday: 'short', day: 'numeric', month: 'short' });
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 
   // Same lookup rules as the skill: prefer populated places (PPL*), retry in other languages
   async function geocode(input) {
@@ -170,8 +330,9 @@
     const m = name.match(/^(.+?),\s*(.+)$/);
     if (m) { name = m[1].trim(); country = m[2].trim(); }
     let fallback = [];
-    for (const lang of ['en', 'sv', 'de', 'fr', 'es', 'it', 'nl', 'pl']) {
-      const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?count=10&format=json&language=${lang}&name=${encodeURIComponent(name)}`);
+    // Try the chosen language first, so place and country names come back in it where possible
+    for (const gl of [lang, ...['en', 'sv', 'de', 'fr', 'es', 'it', 'nl', 'pl'].filter(x => x !== lang)]) {
+      const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?count=10&format=json&language=${gl}&name=${encodeURIComponent(name)}`);
       if (!r.ok) throw new Error('Place lookup failed (' + r.status + ')');
       let res = (await r.json()).results || [];
       if (country) {
@@ -202,17 +363,16 @@
     const minT = Math.min(d.temperature_2m_min[0], d.temperature_2m_min[1]);
     const maxT = Math.max(d.temperature_2m_max[0], d.temperature_2m_max[1]);
     const gusts = Math.max(d.wind_gusts_10m_max[0], d.wind_gusts_10m_max[1]);
-    const parts = [];
-    if (snow) parts.push('snow is likely – wear good shoes');
-    else if (rainy) parts.push('bring an umbrella');
-    else parts.push('no umbrella needed');
-    if (minT <= 0) parts.push('it will freeze – dress warmly');
-    else if (maxT < 8) parts.push('wear a warm jacket');
-    else if (maxT < 16) parts.push('a light jacket is enough');
-    else if (maxT >= 25) parts.push('it will be warm – stay hydrated');
-    if (gusts >= 15) parts.push('windy, with strong gusts');
-    const s = parts.join(', ');
-    return s.charAt(0).toUpperCase() + s.slice(1) + '.';
+    const a = L10N().adv, parts = [];
+    if (snow) parts.push(a.snow);
+    else if (rainy) parts.push(a.umbrella);
+    else parts.push(a.noUmbrella);
+    if (minT <= 0) parts.push(a.freeze);
+    else if (maxT < 8) parts.push(a.warmJacket);
+    else if (maxT < 16) parts.push(a.lightJacket);
+    else if (maxT >= 25) parts.push(a.hot);
+    if (gusts >= 15) parts.push(a.windy);
+    return cap(parts.join(', ')) + '.';
   }
 
   function render(p, others, w) {
@@ -220,21 +380,21 @@
     // 7-day list: one row per day; the bar shows the day's min–max on a scale shared by the whole week
     const wkMin = Math.min(...d.temperature_2m_min), wkMax = Math.max(...d.temperature_2m_max), span = Math.max(1, wkMax - wkMin);
     const dayRow = i => {
-      const [t, ico] = wmo(d.weather_code[i]);
+      const [cond, ico] = wmo(d.weather_code[i]);
       const lo = d.temperature_2m_min[i], hi = d.temperature_2m_max[i];
-      const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : new Date(d.time[i] + 'T12:00').toLocaleDateString('en-GB', { weekday: 'long' });
-      const date = new Date(d.time[i] + 'T12:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+      const label = i === 0 ? t('today') : i === 1 ? t('tomorrow') : cap(date(d.time[i], { weekday: 'long' }));
+      const day = date(d.time[i], { day: 'numeric', month: 'short' });
       const mm = d.precipitation_sum[i], pct = d.precipitation_probability_max[i];
       return `<div class="wrow${i === 0 ? ' today' : ''}">
-        <div class="wday">${label}<span class="sub">${esc(date)}</span></div>
-        <div class="wcond"><span class="icon" aria-hidden="true">${ico}</span><span>${esc(t)}</span></div>
-        <div class="wtemp" title="${r0(lo)} to ${r0(hi)} °C">
+        <div class="wday">${esc(label)}<span class="sub">${esc(day)}</span></div>
+        <div class="wcond"><span class="icon" aria-hidden="true">${ico}</span><span>${esc(cond)}</span></div>
+        <div class="wtemp" title="${esc(t('range', { a: r0(lo), b: r0(hi) }))}">
           <span class="tmin">${r0(lo)}°</span>
           <span class="tbar"><span style="left:${(lo - wkMin) / span * 100}%;width:${(hi - lo) / span * 100}%"></span></span>
           <span class="tmax">${r0(hi)}°</span>
         </div>
-        <div class="wrain">${mm > 0 ? `💧 ${r1(mm)} mm` : '<span class="none">No rain</span>'}${pct != null ? ` <span class="muted">${pct}%</span>` : ''}</div>
-        <div class="wwind">${dir(d.wind_direction_10m_dominant[i])} ${r0(d.wind_speed_10m_max[i])} m/s <span class="muted">gusts ${r0(d.wind_gusts_10m_max[i])}</span></div>
+        <div class="wrain">${mm > 0 ? `💧 ${r1(mm)} mm` : `<span class="none">${esc(t('noRain'))}</span>`}${pct != null ? ` <span class="muted">${pct}%</span>` : ''}</div>
+        <div class="wwind">${dir(d.wind_direction_10m_dominant[i])} ${r0(d.wind_speed_10m_max[i])} m/s <span class="muted">${esc(t('gusts'))} ${r0(d.wind_gusts_10m_max[i])}</span></div>
         <div class="wsun">↑ ${esc(d.sunrise[i].slice(11))} · ↓ ${esc(d.sunset[i].slice(11))}</div>
       </div>`;
     };
@@ -242,23 +402,23 @@
     $('out').innerHTML = `
       <div class="card">
         <div class="place-row"><div class="place">${esc(where)}</div><button type="button" class="secondary" id="favbtn"></button></div>
-        <div class="sub">Local time ${esc(c.time.replace('T', ' '))} · ${esc(w.timezone)}</div>
+        <div class="sub">${esc(t('localTime'))} ${esc(c.time.replace('T', ' '))} · ${esc(w.timezone)}</div>
         <div class="now">
           <span class="icon" aria-hidden="true">${cIco}</span>
           <span class="temp">${r1(c.temperature_2m)} °C</span>
-          <span>${esc(cTxt)}<br><span class="sub">Feels like ${r1(c.apparent_temperature)} °C · wind ${r1(c.wind_speed_10m)} m/s</span></span>
+          <span>${esc(cTxt)}<br><span class="sub">${esc(t('feels', { t: r1(c.apparent_temperature), w: r1(c.wind_speed_10m) }))}</span></span>
         </div>
         <div class="advice">${esc(advice(d))}</div>
-        ${others.length ? `<div class="others">Meant another ${esc(p.name)}? ${others.map(o => `<a data-q="${esc(o.name + ', ' + (o.country_code || o.country))}" title="${esc([o.admin1, o.country].filter(Boolean).join(', '))}">${esc(o.name)}, ${esc(o.admin1 || '')} ${esc(o.country_code || '')}</a>`).join('')}</div>` : ''}
+        ${others.length ? `<div class="others">${esc(t('meantAnother', { n: p.name }))} ${others.map(o => `<a data-q="${esc(o.name + ', ' + (o.country_code || o.country))}" title="${esc([o.admin1, o.country].filter(Boolean).join(', '))}">${esc(o.name)}, ${esc(o.admin1 || '')} ${esc(o.country_code || '')}</a>`).join('')}</div>` : ''}
       </div>
       <div class="card">
-        <div style="font-weight:600">7-day forecast</div>
-        <div class="sub">Rain: total mm and highest chance. Wind: strongest of the day.</div>
+        <div style="font-weight:600">${esc(t('week'))}</div>
+        <div class="sub">${esc(t('weekSub'))}</div>
         <div class="week">${d.time.map((_, i) => dayRow(i)).join('')}</div>
       </div>
       <div class="card">
-        <div style="font-weight:600">Next 48 hours</div>
-        <div class="sub">Temperature (°C) and rain (mm per hour). Hover for details.</div>
+        <div style="font-weight:600">${esc(t('next48'))}</div>
+        <div class="sub">${esc(t('next48Sub'))}</div>
         <div id="chartT" style="margin-top:10px"></div>
         <div id="chartR"></div>
       </div>`;
@@ -282,7 +442,7 @@
     const H1 = 190, t1 = 14, b1 = 22;
     const tMin = Math.floor(Math.min(...T) - 1), tMax = Math.ceil(Math.max(...T) + 1);
     const yT = v => t1 + (H1 - t1 - b1) * (tMax - v) / (tMax - tMin);
-    const s1 = mk('svg', { viewBox: `0 0 ${W} ${H1}`, width: '100%', role: 'img', 'aria-label': 'Hourly temperature for the next 48 hours' }, $('chartT'));
+    const s1 = mk('svg', { viewBox: `0 0 ${W} ${H1}`, width: '100%', role: 'img', 'aria-label': t('ariaTemp') }, $('chartT'));
     const step = (tMax - tMin) > 12 ? 4 : 2;
     for (let v = Math.ceil(tMin / step) * step; v <= tMax; v += step) {
       mk('line', { x1: m.l, x2: W - m.r, y1: yT(v), y2: yT(v), class: 'gridline' }, s1);
@@ -295,7 +455,7 @@
     const iMax = T.indexOf(Math.max(...T)), iMin = T.indexOf(Math.min(...T));
     [[iMax, -8], [iMin, 16]].forEach(([i, dy]) => mk('text', { x: x(i), y: yT(T[i]) + dy, 'text-anchor': 'middle', style: 'fill:var(--text-primary);font-weight:600' }, s1).textContent = r1(T[i]) + '°');
     mk('circle', { cx: x(nowIdx), cy: yT(T[nowIdx]), r: 4.5, fill: 'var(--temp)', stroke: 'var(--surface-1)', 'stroke-width': 2 }, s1);
-    mk('text', { x: x(nowIdx) + 8, y: t1 + 2, style: 'fill:var(--text-muted);font-size:10px' }, s1).textContent = 'now';
+    mk('text', { x: x(nowIdx) + 8, y: t1 + 2, style: 'fill:var(--text-muted);font-size:10px' }, s1).textContent = t('now');
     mk('line', { x1: x(nowIdx), x2: x(nowIdx), y1: t1 - 6, y2: H1 - b1, class: 'axis', 'stroke-dasharray': '1 3' }, s1);
     svgs.push({ svg: s1, top: t1, bottom: H1 - b1 });
 
@@ -303,7 +463,7 @@
     const H2 = 110, t2 = 8, b2 = 8;
     const rMax = Math.max(1, Math.ceil(Math.max(...R)));
     const yR = v => t2 + (H2 - t2 - b2) * (rMax - v) / rMax;
-    const s2 = mk('svg', { viewBox: `0 0 ${W} ${H2}`, width: '100%', role: 'img', 'aria-label': 'Hourly rain for the next 48 hours' }, $('chartR'));
+    const s2 = mk('svg', { viewBox: `0 0 ${W} ${H2}`, width: '100%', role: 'img', 'aria-label': t('ariaRain') }, $('chartR'));
     [0, rMax / 2, rMax].forEach(v => { mk('line', { x1: m.l, x2: W - m.r, y1: yR(v), y2: yR(v), class: 'gridline' }, s2); mk('text', { x: m.l - 6, y: yR(v) + 4, 'text-anchor': 'end' }, s2).textContent = r1(v); });
     mk('text', { x: m.l + 4, y: t2 + 10, style: 'fill:var(--text-muted);font-size:10px' }, s2).textContent = 'mm/h';
     const bw = Math.max(2, (W - m.l - m.r) / n - 2);
@@ -314,7 +474,7 @@
       mk('path', { d: `M${x0},${y0} V${y1 + rr} Q${x0},${y1} ${x0 + rr},${y1} H${x0 + bw - rr} Q${x0 + bw},${y1} ${x0 + bw},${y1 + rr} V${y0} Z`, fill: 'var(--rain)' }, s2);
     });
     mk('line', { x1: m.l, x2: W - m.r, y1: yR(0), y2: yR(0), class: 'axis' }, s2);
-    if (!R.some(v => v > 0)) mk('text', { x: W / 2, y: H2 / 2 + 4, 'text-anchor': 'middle', style: 'fill:var(--text-muted)' }, s2).textContent = 'No rain expected';
+    if (!R.some(v => v > 0)) mk('text', { x: W / 2, y: H2 / 2 + 4, 'text-anchor': 'middle', style: 'fill:var(--text-muted)' }, s2).textContent = t('noRainExpected');
     svgs.push({ svg: s2, top: t2, bottom: H2 - b2 });
 
     // Crosshair + tooltip
@@ -329,7 +489,7 @@
         const i = Math.max(0, Math.min(n - 1, Math.round((sx - m.l) / (W - m.l - m.r) * (n - 1))));
         hairs.forEach(h => { h.setAttribute('x1', x(i)); h.setAttribute('x2', x(i)); h.setAttribute('visibility', 'visible'); });
         dot.setAttribute('cx', x(i)); dot.setAttribute('cy', yT(T[i])); dot.setAttribute('visibility', 'visible');
-        tip.innerHTML = `<b>${esc(fmtDay(times[i].slice(0, 10)))} ${esc(times[i].slice(11, 16))}</b><br>${r1(T[i])} °C · ${r1(R[i])} mm rain`;
+        tip.innerHTML = `<b>${esc(fmtDay(times[i].slice(0, 10)))} ${esc(times[i].slice(11, 16))}</b><br>${r1(T[i])} °C · ${esc(t('tipRain', { mm: r1(R[i]) }))}`;
         tip.style.display = 'block';
         const tw = tip.offsetWidth; let tx = e.clientX + 14; if (tx + tw > innerWidth - 8) tx = e.clientX - tw - 14;
         tip.style.left = tx + 'px'; tip.style.top = (e.clientY + 14) + 'px';
@@ -338,16 +498,19 @@
     });
   }
 
+  const loadingHtml = key => `<div class="card sub">${esc(t(key))}</div>`;
+  const errHtml = m => `<div class="card err">${esc(t('loadErr', { m }))}</div>`;
+
   async function run(q, pan = true) {
-    $('out').innerHTML = '<div class="card sub">Loading…</div>';
+    $('out').innerHTML = loadingHtml('loading');
     try {
       const hits = await geocode(q);
-      if (!hits.length) { $('out').innerHTML = `<div class="card err">No place called “${esc(q)}” was found. Check the spelling or add a country, e.g. <i>${esc(q)}, SE</i>.</div>`; return; }
+      if (!hits.length) { $('out').innerHTML = `<div class="card err">${t('notFoundHtml', { q: esc(q) })}</div>`; return; }
       await show(hits[0], hits.slice(1, 5), pan, q);
       localStorage.setItem('wf-start', JSON.stringify({ city: q }));
       history.replaceState(null, '', '?city=' + encodeURIComponent(q));
     } catch (e) {
-      $('out').innerHTML = `<div class="card err">Could not load the weather: ${esc(e.message)}. Check your internet connection and try again.</div>`;
+      $('out').innerHTML = errHtml(e.message);
     }
   }
 
@@ -360,8 +523,9 @@
       q,
       place: { name: p.name, admin1: p.admin1 || null, country: p.country || null, country_code: p.country_code || null, latitude: +p.latitude, longitude: +p.longitude }
     };
+    lastView = { p, others, w };
     render(p, others, w);
-    document.title = 'Weather – ' + p.name;
+    document.title = t('docTitle') + ' – ' + p.name;
     setMarker(p, w, pan);
   }
 
@@ -378,12 +542,12 @@
   function renderFavs() {
     const box = $('favs');
     if (!favs.length) {
-      box.innerHTML = `<span class="hint">Tip: tap <b>☆ Save</b> next to a place name to keep it here – up to ${MAX_FAV} favourites.</span>`;
+      box.innerHTML = `<span class="hint">${t('favTipHtml', { n: MAX_FAV })}</span>`;
     } else {
-      box.innerHTML = `<span class="fav-label">★ Favourites</span>` + favs.map((f, i) => `
+      box.innerHTML = `<span class="fav-label">${esc(t('favLabel'))}</span>` + favs.map((f, i) => `
         <span class="chip${current && favKey(f) === favKey(current) ? ' active' : ''}">
-          <button type="button" class="chip-go" data-i="${i}" title="Show the weather in ${esc(f.label)}">${esc(f.label)}</button>
-          <button type="button" class="chip-x" data-i="${i}" title="Remove ${esc(f.label)} from favourites" aria-label="Remove ${esc(f.label)}">×</button>
+          <button type="button" class="chip-go" data-i="${i}" title="${esc(t('favShow', { x: f.label }))}">${esc(f.label)}</button>
+          <button type="button" class="chip-x" data-i="${i}" title="${esc(t('favRemove', { x: f.label }))}" aria-label="${esc(t('favRemove', { x: f.label }))}">×</button>
         </span>`).join('');
       box.querySelectorAll('.chip-go').forEach(b => b.onclick = () => openFav(favs[+b.dataset.i]));
       box.querySelectorAll('.chip-x').forEach(b => b.onclick = () => { favs.splice(+b.dataset.i, 1); saveFavs(); renderFavs(); });
@@ -391,10 +555,10 @@
     const btn = $('favbtn');
     if (btn && current) {
       const on = isFav(current);
-      btn.textContent = on ? '★ Saved' : '☆ Save';
+      btn.textContent = on ? t('saved') : t('save');
       btn.classList.toggle('on', on);
-      btn.title = on ? 'Remove from favourites'
-        : favs.length >= MAX_FAV ? `You have ${MAX_FAV} favourites – remove one (×) to save this place` : 'Save as a favourite';
+      btn.title = on ? t('unsaveTitle')
+        : favs.length >= MAX_FAV ? t('fullTitle', { n: MAX_FAV }) : t('saveTitle');
     }
   }
 
@@ -402,14 +566,14 @@
     if (!current) return;
     const i = favs.findIndex(f => favKey(f) === favKey(current));
     if (i >= 0) favs.splice(i, 1);
-    else if (favs.length >= MAX_FAV) { alert(`You can save up to ${MAX_FAV} favourites. Remove one with × first.`); return; }
+    else if (favs.length >= MAX_FAV) { alert(t('fullAlert', { n: MAX_FAV })); return; }
     else favs.push({ label: current.label, q: current.q, place: current.place });
     saveFavs(); renderFavs();
   }
 
   // Open a favourite straight from its saved coordinates (no new place lookup)
   async function openFav(f) {
-    $('out').innerHTML = '<div class="card sub">Loading…</div>';
+    $('out').innerHTML = loadingHtml('loading');
     $('city').value = f.q || f.label;
     try {
       await show({ ...f.place }, [], true, f.q || null);
@@ -417,7 +581,7 @@
       if (f.q) { localStorage.setItem('wf-start', JSON.stringify({ city: f.q })); history.replaceState(null, '', '?city=' + encodeURIComponent(f.q)); }
       else { localStorage.setItem('wf-start', JSON.stringify({ lat: p.latitude, lon: p.longitude })); history.replaceState(null, '', `?lat=${p.latitude.toFixed(4)}&lon=${p.longitude.toFixed(4)}`); }
     } catch (e) {
-      $('out').innerHTML = `<div class="card err">Could not load the weather: ${esc(e.message)}. Check your internet connection and try again.</div>`;
+      $('out').innerHTML = errHtml(e.message);
     }
   }
   // Keep several open tabs in sync
@@ -437,7 +601,7 @@
     map.on('click', e => runCoords(e.latlng.lat, L.Util.wrapNum(e.latlng.lng, [-180, 180], true), true));
     setTimeout(() => map.invalidateSize(), 0);
   } else {
-    $('map').outerHTML = '<div class="sub" style="margin-top:10px">The map could not be loaded (no connection to unpkg.com). City search still works.</div>';
+    $('map').outerHTML = `<div class="sub" style="margin-top:10px" data-i18n="mapFail">${esc(t('mapFail'))}</div>`;
   }
 
   function setMarker(p, w, pan) {
@@ -453,7 +617,7 @@
   async function reverseGeocode(lat, lon) {
     const p = { name: `${lat.toFixed(2)}°, ${lon.toFixed(2)}°`, admin1: null, country: null, country_code: null, latitude: lat, longitude: lon };
     try {
-      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=en&lat=${lat}&lon=${lon}`);
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=${lang}&lat=${lat}&lon=${lon}`);
       if (!r.ok) return p;
       const j = await r.json();
       if (j.error || !j.address) return p;   // e.g. open sea
@@ -467,7 +631,7 @@
   }
 
   async function runCoords(lat, lon, scroll = false) {
-    $('out').innerHTML = '<div class="card sub">Loading…</div>';
+    $('out').innerHTML = loadingHtml('loading');
     try {
       const p = await reverseGeocode(lat, lon);
       $('city').value = p.country_code && !p.name.includes('°') ? `${p.name}, ${p.country_code}` : p.name;
@@ -476,7 +640,7 @@
       history.replaceState(null, '', `?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`);
       if (scroll) $('out').scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (e) {
-      $('out').innerHTML = `<div class="card err">Could not load the weather: ${esc(e.message)}. Check your internet connection and try again.</div>`;
+      $('out').innerHTML = errHtml(e.message);
     }
   }
 
@@ -484,11 +648,11 @@
 
   // Use my location (needs https or localhost)
   $('locate').onclick = () => {
-    if (!navigator.geolocation) { alert('Location is not available in this browser.'); return; }
-    $('out').innerHTML = '<div class="card sub">Finding your location…</div>';
+    if (!navigator.geolocation) { alert(t('geoNone')); return; }
+    $('out').innerHTML = loadingHtml('locating');
     navigator.geolocation.getCurrentPosition(
       pos => { runCoords(pos.coords.latitude, pos.coords.longitude, true); if (map) map.setView([pos.coords.latitude, pos.coords.longitude], 8); },
-      err => { $('out').innerHTML = `<div class="card err">Could not get your location (${esc(err.message)}). Allow location access for this app, or search for a city.</div>`; },
+      err => { $('out').innerHTML = `<div class="card err">${esc(t('geoErr', { m: err.message }))}</div>`; },
       { enableHighAccuracy: false, timeout: 15000, maximumAge: 600000 });
   };
 
@@ -508,23 +672,45 @@
     $('install').style.display = 'inline-block';
     $('install').onclick = () => {
       if ($('ioshelp')) return;
-      const steps = isSafari
-        ? `<ol>
-             <li>Tap the <span class="share">Share ⬆︎</span> button ${device === 'iPad' ? 'at the top right' : 'at the bottom'} of Safari.</li>
-             <li>Scroll down and tap <b>Add to Home Screen</b>.</li>
-             <li>Tap <b>Add</b>. The Weather app appears on your home screen.</li>
-           </ol>`
-        : `<ol>
-             <li>Open this page in <b>Safari</b> (copy the address, or tap ⋯ → <i>Open in Safari</i>).</li>
-             <li>Tap <span class="share">Share ⬆︎</span>, then <b>Add to Home Screen</b>.</li>
-             <li>Tap <b>Add</b>.</li>
-           </ol>`;
-      document.body.insertAdjacentHTML('beforeend', `<div class="ios-help viz-root" id="ioshelp" role="dialog" aria-label="Install on ${device}" style="min-height:0">
-        <h3>Install Weather on your ${device}</h3>${steps}
+      const share = `<span class="share">${esc(t('share'))}</span>`;
+      const steps = (isSafari
+        ? [t(device === 'iPad' ? 'iosShareTopHtml' : 'iosShareBottomHtml', { share }), t('iosStep2Html'), t('iosStep3Html')]
+        : [t('iosOpenSafariHtml'), t('iosShareThenAddHtml', { share }), t('iosAddHtml')]
+      ).map(s => `<li>${s}</li>`).join('');
+      const title = esc(t('iosTitle', { d: device }));
+      document.body.insertAdjacentHTML('beforeend', `<div class="ios-help viz-root" id="ioshelp" role="dialog" aria-label="${title}" style="min-height:0">
+        <h3>${title}</h3><ol>${steps}</ol>
         <button type="button" id="iosclose">OK</button></div>`);
       $('iosclose').onclick = () => $('ioshelp').remove();
     };
   }
+
+  // ---- Language switch ----
+  let lastView = null;   // what is on screen, so it can be drawn again in another language
+  function applyStaticTexts() {
+    document.documentElement.lang = lang;
+    document.querySelectorAll('[data-i18n]').forEach(e => e.textContent = t(e.dataset.i18n));
+    document.querySelectorAll('[data-i18n-html]').forEach(e => e.innerHTML = t(e.dataset.i18nHtml));   // trusted texts from TEXT only
+    document.querySelectorAll('[data-i18n-ph]').forEach(e => e.placeholder = t(e.dataset.i18nPh));
+    document.querySelectorAll('[data-i18n-title]').forEach(e => e.title = t(e.dataset.i18nTitle));
+    document.querySelectorAll('.lang button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.lang === lang)));
+  }
+  function setLang(l) {
+    if (!LANGS.includes(l) || l === lang) return;
+    lang = l;
+    localStorage.setItem('wf-lang', l);
+    applyStaticTexts();
+    renderFavs();
+    $('ioshelp')?.remove();
+    if (lastView) {
+      render(lastView.p, lastView.others, lastView.w);
+      document.title = t('docTitle') + ' – ' + lastView.p.name;
+      setMarker(lastView.p, lastView.w, false);
+    } else document.title = t('title');
+  }
+  document.querySelectorAll('.lang button').forEach(b => b.onclick = () => setLang(b.dataset.lang));
+  applyStaticTexts();
+  document.title = t('title');
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
   // Start: ?city= or ?lat=&lon= in the URL, else the last choice, else Malmö
