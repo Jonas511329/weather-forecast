@@ -1,7 +1,7 @@
 // Service worker: makes the app installable and lets it open offline.
 // App files: cache first (updated in the background). Weather data: network first, last answer as offline fallback.
-// Map tiles are not cached (OpenStreetMap policy discourages bulk caching).
-const VERSION = 'weather-v1';
+// Map tiles are not cached (tile providers discourage bulk caching).
+const VERSION = 'weather-v4';
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png', './icons/favicon-32.png',
@@ -30,7 +30,7 @@ self.addEventListener('fetch', e => {
     }).catch(() => caches.match(req)));
     return;
   }
-  if (url.hostname === 'tile.openstreetmap.org') return;   // let the browser handle tiles
+  if (url.hostname === 'server.arcgisonline.com' || url.hostname === 'tile.openstreetmap.org') return;   // let the browser handle tiles
 
   // App shell: cache first, refresh in the background
   e.respondWith(caches.match(req, { ignoreSearch: url.origin === location.origin }).then(hit => {

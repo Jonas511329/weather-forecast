@@ -48,14 +48,31 @@
   .now { display: flex; align-items: center; gap: 18px; margin-top: 10px; flex-wrap: wrap; }
   .now .icon { font-size: 52px; line-height: 1; }
   .now .temp { font-size: 44px; font-weight: 600; }
-  .days { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  @media (max-width: 700px) { .days { grid-template-columns: 1fr; } }
-  .day h2 { font-size: 15px; margin: 0; color: var(--text-secondary); font-weight: 600; }
-  .day .cond { display: flex; align-items: center; gap: 10px; margin: 8px 0 12px; font-size: 18px; font-weight: 600; }
-  .day .cond .icon { font-size: 34px; }
-  .day dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; font-size: 14px; }
-  .day dt { color: var(--text-secondary); }
-  .day dd { margin: 0; font-variant-numeric: tabular-nums; }
+  /* 7-day list */
+  .week { margin-top: 8px; }
+  .wrow { display: grid; grid-template-columns: 110px minmax(150px, 1.3fr) minmax(170px, 1.6fr) 120px 150px 110px;
+          grid-template-areas: "day cond temp rain wind sun"; align-items: center; gap: 4px 14px;
+          padding: 10px 0; border-top: 1px solid var(--grid); font-size: 14px; font-variant-numeric: tabular-nums; }
+  .wrow:first-child { border-top: 0; }
+  .wrow.today { font-weight: 600; }
+  .wday { grid-area: day; display: flex; flex-direction: column; line-height: 1.25; }
+  .wday .sub { font-weight: 400; }
+  .wcond { grid-area: cond; display: flex; align-items: center; gap: 8px; }
+  .wcond .icon { font-size: 26px; line-height: 1; }
+  .wtemp { grid-area: temp; display: grid; grid-template-columns: 34px 1fr 34px; align-items: center; gap: 8px; }
+  .wtemp .tmin { color: var(--text-secondary); text-align: right; }
+  .tbar { position: relative; height: 6px; border-radius: 3px; background: var(--grid); }
+  .tbar span { position: absolute; top: 0; bottom: 0; border-radius: 3px; background: var(--temp); min-width: 6px; }
+  .wrain { grid-area: rain; }
+  .wrain .none { color: var(--text-muted); }
+  .wwind { grid-area: wind; }
+  .wsun { grid-area: sun; color: var(--text-secondary); font-size: 13px; }
+  .wrow .muted { color: var(--text-muted); font-size: 12px; }
+  @media (max-width: 760px) {
+    .wrow { grid-template-columns: 92px 1fr; grid-template-areas: "day cond" "day temp" "day rain" "day wind"; align-items: start; }
+    .wsun { display: none; }
+    .wtemp { grid-template-columns: 30px 1fr 30px; }
+  }
   .advice { margin-top: 14px; font-size: 15px; }
   .others { margin-top: 10px; font-size: 13px; color: var(--text-secondary); }
   .others a { color: var(--accent); cursor: pointer; text-decoration: underline; margin-right: 10px; }
@@ -68,6 +85,17 @@
   footer a { color: inherit; }
   button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
   #install { display: none; }
+  /* Favourites */
+  .favs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; min-height: 32px; }
+  .fav-label { font-size: 13px; color: var(--text-secondary); margin-right: 2px; }
+  .chip { display: inline-flex; align-items: stretch; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-1); overflow: hidden; }
+  .chip.active { border-color: var(--accent); }
+  .chip button { background: transparent; color: var(--text-primary); border-radius: 0; font-size: 14px; padding: 5px 4px 5px 12px; }
+  .chip button.chip-x { color: var(--text-muted); padding: 5px 10px 5px 6px; font-size: 16px; line-height: 1; }
+  .chip button.chip-x:hover { color: #b3261e; }
+  .place-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  #favbtn { font-size: 14px; padding: 6px 12px; }
+  #favbtn.on { background: var(--accent); color: #fff; }
   /* Phone layout */
   @media (max-width: 600px) {
     .viz-root { padding: calc(14px + env(safe-area-inset-top)) 12px calc(32px + env(safe-area-inset-bottom)); }
@@ -78,7 +106,6 @@
     #map { height: 300px; }
     .card { padding: 14px; margin-top: 12px; }
     .now .icon { font-size: 44px; } .now .temp { font-size: 38px; }
-    .days { gap: 0; }
   }
 </style>
 </head>
@@ -86,7 +113,7 @@
 <div class="viz-root">
 <div class="wrap">
   <h1>Weather forecast</h1>
-  <div class="sub">Today and tomorrow for any city</div>
+  <div class="sub">7-day forecast for any city</div>
   <form id="f">
     <input type="search" id="city" placeholder="City, e.g. Malmö or Paris, US" autocomplete="off" required>
     <button type="submit">Show weather</button>
@@ -94,13 +121,14 @@
     <button type="button" class="secondary" id="install">⬇ Install app</button>
   </form>
   <div class="hint">Add a country or country code to pick a specific place: <i>Lund, SE</i> · <i>Paris, US</i></div>
+  <div class="favs" id="favs"></div>
   <div class="card map-card">
     <div style="font-weight:600">Pick a place on the map</div>
     <div class="sub">Tap or click anywhere in the world to see the weather there. Scroll or pinch to zoom.</div>
     <div id="map"></div>
   </div>
   <div id="out"></div>
-  <footer>Weather: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (free, no API key). Map: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors; place names for map clicks from OpenStreetMap Nominatim. Only the city name or the clicked coordinates are sent.</footer>
+  <footer>Weather: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (free, no API key). Map tiles: <a href="https://www.esri.com/" target="_blank" rel="noopener">Esri</a> (sources incl. © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors); place names for map clicks from OpenStreetMap Nominatim. Only the city name or the clicked coordinates are sent.</footer>
 </div>
 <div class="tip" id="tip"></div>
 </div>
@@ -150,7 +178,7 @@
       '&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m' +
       '&hourly=temperature_2m,precipitation' +
       '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,wind_direction_10m_dominant,sunrise,sunset' +
-      '&wind_speed_unit=ms&timezone=auto&forecast_days=2';
+      '&wind_speed_unit=ms&timezone=auto&forecast_days=7';
     const r = await fetch(u);
     if (!r.ok) throw new Error('Forecast failed (' + r.status + ')');
     return r.json();
@@ -177,22 +205,31 @@
 
   function render(p, others, w) {
     const c = w.current, d = w.daily, [cTxt, cIco] = wmo(c.weather_code);
-    const dayCard = (i, label) => {
+    // 7-day list: one row per day; the bar shows the day's min–max on a scale shared by the whole week
+    const wkMin = Math.min(...d.temperature_2m_min), wkMax = Math.max(...d.temperature_2m_max), span = Math.max(1, wkMax - wkMin);
+    const dayRow = i => {
       const [t, ico] = wmo(d.weather_code[i]);
-      return `<div class="card day">
-        <h2>${label}, ${esc(fmtDay(d.time[i]))}</h2>
-        <div class="cond"><span class="icon" aria-hidden="true">${ico}</span>${esc(t)}</div>
-        <dl>
-          <dt>Temperature</dt><dd>${r0(d.temperature_2m_min[i])}–${r0(d.temperature_2m_max[i])} °C</dd>
-          <dt>Rain</dt><dd>${r1(d.precipitation_sum[i])} mm (${d.precipitation_probability_max[i] ?? '–'}% chance)</dd>
-          <dt>Wind</dt><dd>${dir(d.wind_direction_10m_dominant[i])}, up to ${r1(d.wind_speed_10m_max[i])} m/s, gusts ${r1(d.wind_gusts_10m_max[i])} m/s</dd>
-          <dt>Sun</dt><dd>↑ ${esc(d.sunrise[i].slice(11))} · ↓ ${esc(d.sunset[i].slice(11))}</dd>
-        </dl></div>`;
+      const lo = d.temperature_2m_min[i], hi = d.temperature_2m_max[i];
+      const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : new Date(d.time[i] + 'T12:00').toLocaleDateString('en-GB', { weekday: 'long' });
+      const date = new Date(d.time[i] + 'T12:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+      const mm = d.precipitation_sum[i], pct = d.precipitation_probability_max[i];
+      return `<div class="wrow${i === 0 ? ' today' : ''}">
+        <div class="wday">${label}<span class="sub">${esc(date)}</span></div>
+        <div class="wcond"><span class="icon" aria-hidden="true">${ico}</span><span>${esc(t)}</span></div>
+        <div class="wtemp" title="${r0(lo)} to ${r0(hi)} °C">
+          <span class="tmin">${r0(lo)}°</span>
+          <span class="tbar"><span style="left:${(lo - wkMin) / span * 100}%;width:${(hi - lo) / span * 100}%"></span></span>
+          <span class="tmax">${r0(hi)}°</span>
+        </div>
+        <div class="wrain">${mm > 0 ? `💧 ${r1(mm)} mm` : '<span class="none">No rain</span>'}${pct != null ? ` <span class="muted">${pct}%</span>` : ''}</div>
+        <div class="wwind">${dir(d.wind_direction_10m_dominant[i])} ${r0(d.wind_speed_10m_max[i])} m/s <span class="muted">gusts ${r0(d.wind_gusts_10m_max[i])}</span></div>
+        <div class="wsun">↑ ${esc(d.sunrise[i].slice(11))} · ↓ ${esc(d.sunset[i].slice(11))}</div>
+      </div>`;
     };
     const where = [p.name, p.admin1 && p.admin1 !== p.name ? p.admin1 : null, p.country].filter(Boolean).join(', ');
     $('out').innerHTML = `
       <div class="card">
-        <div class="place">${esc(where)}</div>
+        <div class="place-row"><div class="place">${esc(where)}</div><button type="button" class="secondary" id="favbtn"></button></div>
         <div class="sub">Local time ${esc(c.time.replace('T', ' '))} · ${esc(w.timezone)}</div>
         <div class="now">
           <span class="icon" aria-hidden="true">${cIco}</span>
@@ -202,7 +239,11 @@
         <div class="advice">${esc(advice(d))}</div>
         ${others.length ? `<div class="others">Meant another ${esc(p.name)}? ${others.map(o => `<a data-q="${esc(o.name + ', ' + (o.country_code || o.country))}" title="${esc([o.admin1, o.country].filter(Boolean).join(', '))}">${esc(o.name)}, ${esc(o.admin1 || '')} ${esc(o.country_code || '')}</a>`).join('')}</div>` : ''}
       </div>
-      <div class="days">${dayCard(0, 'Today')}${dayCard(1, 'Tomorrow')}</div>
+      <div class="card">
+        <div style="font-weight:600">7-day forecast</div>
+        <div class="sub">Rain: total mm and highest chance. Wind: strongest of the day.</div>
+        <div class="week">${d.time.map((_, i) => dayRow(i)).join('')}</div>
+      </div>
       <div class="card">
         <div style="font-weight:600">Next 48 hours</div>
         <div class="sub">Temperature (°C) and rain (mm per hour). Hover for details.</div>
@@ -210,6 +251,8 @@
         <div id="chartR"></div>
       </div>`;
     $('out').querySelectorAll('.others a').forEach(a => a.onclick = () => { $('city').value = a.dataset.q; run(a.dataset.q); });
+    $('favbtn').onclick = toggleFav;
+    renderFavs();
     charts(w);
   }
 
@@ -217,7 +260,8 @@
   function charts(w) {
     const NS = 'http://www.w3.org/2000/svg';
     const mk = (tag, a, parent) => { const e = document.createElementNS(NS, tag); for (const k in a) e.setAttribute(k, a[k]); parent && parent.appendChild(e); return e; };
-    const times = w.hourly.time, T = w.hourly.temperature_2m, R = w.hourly.precipitation, n = times.length;
+    // The API returns 7 days of hours; the chart shows the first 48
+    const times = w.hourly.time.slice(0, 48), T = w.hourly.temperature_2m.slice(0, 48), R = w.hourly.precipitation.slice(0, 48), n = times.length;
     const W = 900, m = { l: 40, r: 12 }, x = i => m.l + (W - m.l - m.r) * i / (n - 1);
     const nowIdx = Math.max(0, times.findIndex(t => t >= w.current.time.slice(0, 13) + ':00'));
     const svgs = [];
@@ -287,7 +331,7 @@
     try {
       const hits = await geocode(q);
       if (!hits.length) { $('out').innerHTML = `<div class="card err">No place called “${esc(q)}” was found. Check the spelling or add a country, e.g. <i>${esc(q)}, SE</i>.</div>`; return; }
-      await show(hits[0], hits.slice(1, 5), pan);
+      await show(hits[0], hits.slice(1, 5), pan, q);
       localStorage.setItem('wf-start', JSON.stringify({ city: q }));
       history.replaceState(null, '', '?city=' + encodeURIComponent(q));
     } catch (e) {
@@ -296,26 +340,90 @@
   }
 
   // Shared: fetch forecast for a place, render it and put a marker on the map
-  async function show(p, others, pan) {
+  // q = the search text that found the place (null for map clicks / my location)
+  async function show(p, others, pan, q = null) {
     const w = await forecast(p);
+    current = {
+      label: p.country_code && !p.name.includes('°') ? `${p.name}, ${p.country_code}` : p.name,
+      q,
+      place: { name: p.name, admin1: p.admin1 || null, country: p.country || null, country_code: p.country_code || null, latitude: +p.latitude, longitude: +p.longitude }
+    };
     render(p, others, w);
     document.title = 'Weather – ' + p.name;
     setMarker(p, w, pan);
   }
 
+  // ---- Favourites: up to 5 places, saved in this browser (localStorage) ----
+  const MAX_FAV = 5;
+  let favs = [];
+  try { favs = JSON.parse(localStorage.getItem('wf-favs') || '[]').filter(f => f && f.place).slice(0, MAX_FAV); } catch (e) {}
+  let current = null;   // the place shown now: { label, q, place }
+  // Same place = same coordinates (rounded to ~1 km), so "Malmö" and "malmo, se" don't both get saved
+  const favKey = f => `${(+f.place.latitude).toFixed(2)},${(+f.place.longitude).toFixed(2)}`;
+  const isFav = f => !!f && favs.some(x => favKey(x) === favKey(f));
+  const saveFavs = () => localStorage.setItem('wf-favs', JSON.stringify(favs));
+
+  function renderFavs() {
+    const box = $('favs');
+    if (!favs.length) {
+      box.innerHTML = `<span class="hint">Tip: tap <b>☆ Save</b> next to a place name to keep it here – up to ${MAX_FAV} favourites.</span>`;
+    } else {
+      box.innerHTML = `<span class="fav-label">★ Favourites</span>` + favs.map((f, i) => `
+        <span class="chip${current && favKey(f) === favKey(current) ? ' active' : ''}">
+          <button type="button" class="chip-go" data-i="${i}" title="Show the weather in ${esc(f.label)}">${esc(f.label)}</button>
+          <button type="button" class="chip-x" data-i="${i}" title="Remove ${esc(f.label)} from favourites" aria-label="Remove ${esc(f.label)}">×</button>
+        </span>`).join('');
+      box.querySelectorAll('.chip-go').forEach(b => b.onclick = () => openFav(favs[+b.dataset.i]));
+      box.querySelectorAll('.chip-x').forEach(b => b.onclick = () => { favs.splice(+b.dataset.i, 1); saveFavs(); renderFavs(); });
+    }
+    const btn = $('favbtn');
+    if (btn && current) {
+      const on = isFav(current);
+      btn.textContent = on ? '★ Saved' : '☆ Save';
+      btn.classList.toggle('on', on);
+      btn.title = on ? 'Remove from favourites'
+        : favs.length >= MAX_FAV ? `You have ${MAX_FAV} favourites – remove one (×) to save this place` : 'Save as a favourite';
+    }
+  }
+
+  function toggleFav() {
+    if (!current) return;
+    const i = favs.findIndex(f => favKey(f) === favKey(current));
+    if (i >= 0) favs.splice(i, 1);
+    else if (favs.length >= MAX_FAV) { alert(`You can save up to ${MAX_FAV} favourites. Remove one with × first.`); return; }
+    else favs.push({ label: current.label, q: current.q, place: current.place });
+    saveFavs(); renderFavs();
+  }
+
+  // Open a favourite straight from its saved coordinates (no new place lookup)
+  async function openFav(f) {
+    $('out').innerHTML = '<div class="card sub">Loading…</div>';
+    $('city').value = f.q || f.label;
+    try {
+      await show({ ...f.place }, [], true, f.q || null);
+      const p = f.place;
+      if (f.q) { localStorage.setItem('wf-start', JSON.stringify({ city: f.q })); history.replaceState(null, '', '?city=' + encodeURIComponent(f.q)); }
+      else { localStorage.setItem('wf-start', JSON.stringify({ lat: p.latitude, lon: p.longitude })); history.replaceState(null, '', `?lat=${p.latitude.toFixed(4)}&lon=${p.longitude.toFixed(4)}`); }
+    } catch (e) {
+      $('out').innerHTML = `<div class="card err">Could not load the weather: ${esc(e.message)}. Check your internet connection and try again.</div>`;
+    }
+  }
+  // Keep several open tabs in sync
+  window.addEventListener('storage', e => { if (e.key === 'wf-favs') { try { favs = JSON.parse(e.newValue || '[]'); } catch (x) { favs = []; } renderFavs(); } });
+  renderFavs();
+
   // ---- World map ----
   let map = null, marker = null;
   if (window.L) {
     map = L.map('map', { worldCopyJump: true, minZoom: 1, maxBounds: [[-85, -Infinity], [85, Infinity]] }).setView([25, 10], 2);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    // Esri World Street Map. Unlike tile.openstreetmap.org it does not require a Referer header, so the map
+    // also works when the page is opened as a file or behind a proxy that strips it. No API key needed.
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
       maxZoom: 18,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      attribution: 'Tiles &copy; <a href="https://www.esri.com/">Esri</a> &mdash; Source: Esri, TomTom, Garmin, USGS, OpenStreetMap contributors and the GIS user community'
     }).addTo(map);
     map.on('click', e => runCoords(e.latlng.lat, L.Util.wrapNum(e.latlng.lng, [-180, 180], true), true));
     setTimeout(() => map.invalidateSize(), 0);
-    if (location.protocol === 'file:') {
-      $('map').insertAdjacentHTML('beforebegin', '<div class="sub" style="margin-top:8px;color:#b3261e">Map shows “Access blocked”? OpenStreetMap needs the page to be served, not opened as a file. Double-click <b>Open weather map.cmd</b> in the same folder.</div>');
-    }
   } else {
     $('map').outerHTML = '<div class="sub" style="margin-top:10px">The map could not be loaded (no connection to unpkg.com). City search still works.</div>';
   }
