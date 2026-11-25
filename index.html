@@ -9,6 +9,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Weather">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
@@ -40,7 +42,8 @@
   h1 { font-size: 24px; margin: 0 0 4px; }
   .sub { color: var(--text-secondary); font-size: 13px; }
   form { display: flex; gap: 8px; margin: 16px 0 6px; flex-wrap: wrap; }
-  input[type=search] { flex: 1; min-width: 220px; font: inherit; font-size: 15px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); color: var(--text-primary); }
+  /* 16px: iOS Safari zooms in on inputs with smaller text */
+  input[type=search] { flex: 1; min-width: 220px; font: inherit; font-size: 16px; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); color: var(--text-primary); }
   button { font: inherit; font-size: 15px; padding: 9px 18px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
   .hint { font-size: 12px; color: var(--text-muted); }
   .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; margin-top: 16px; }
@@ -85,6 +88,15 @@
   footer a { color: inherit; }
   button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
   #install { display: none; }
+  .viz-root { padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(20px, env(safe-area-inset-right)); }
+  /* iPhone / iPad install help (iOS has no install prompt) */
+  .ios-help { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1000; background: var(--surface-1); color: var(--text-primary);
+              border-top: 1px solid var(--border); box-shadow: 0 -6px 24px rgba(0,0,0,.18); border-radius: 14px 14px 0 0;
+              padding: 18px 20px calc(18px + env(safe-area-inset-bottom)); max-width: 560px; margin: 0 auto; }
+  .ios-help h3 { margin: 0 0 10px; font-size: 17px; }
+  .ios-help ol { margin: 0 0 14px; padding-left: 22px; line-height: 1.7; font-size: 15px; }
+  .ios-help .share { display: inline-block; border: 1px solid var(--border); border-radius: 6px; padding: 0 6px; font-size: 14px; }
+  .ios-help button { width: 100%; }
   /* Favourites */
   .favs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; min-height: 32px; }
   .fav-label { font-size: 13px; color: var(--text-secondary); margin-right: 2px; }
@@ -482,9 +494,37 @@
 
   // Install as an app (Android Chrome shows this prompt when the app is served over https)
   let installPrompt = null;
-  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; $('install').style.display = ''; });
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; $('install').style.display = 'inline-block'; });
   $('install').onclick = async () => { if (!installPrompt) return; installPrompt.prompt(); await installPrompt.userChoice; installPrompt = null; $('install').style.display = 'none'; };
   window.addEventListener('appinstalled', () => { $('install').style.display = 'none'; });
+
+  // iPhone / iPad: Safari has no install prompt, so show the "Add to Home Screen" steps instead.
+  // iPadOS reports itself as a Mac, so also check for a touch screen.
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isStandalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+  if (isIOS && !isStandalone) {
+    const isSafari = /Safari/.test(navigator.userAgent) && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(navigator.userAgent);
+    const device = /iPad/.test(navigator.userAgent) || navigator.platform === 'MacIntel' ? 'iPad' : 'iPhone';
+    $('install').style.display = 'inline-block';
+    $('install').onclick = () => {
+      if ($('ioshelp')) return;
+      const steps = isSafari
+        ? `<ol>
+             <li>Tap the <span class="share">Share ⬆︎</span> button ${device === 'iPad' ? 'at the top right' : 'at the bottom'} of Safari.</li>
+             <li>Scroll down and tap <b>Add to Home Screen</b>.</li>
+             <li>Tap <b>Add</b>. The Weather app appears on your home screen.</li>
+           </ol>`
+        : `<ol>
+             <li>Open this page in <b>Safari</b> (copy the address, or tap ⋯ → <i>Open in Safari</i>).</li>
+             <li>Tap <span class="share">Share ⬆︎</span>, then <b>Add to Home Screen</b>.</li>
+             <li>Tap <b>Add</b>.</li>
+           </ol>`;
+      document.body.insertAdjacentHTML('beforeend', `<div class="ios-help viz-root" id="ioshelp" role="dialog" aria-label="Install on ${device}" style="min-height:0">
+        <h3>Install Weather on your ${device}</h3>${steps}
+        <button type="button" id="iosclose">OK</button></div>`);
+      $('iosclose').onclick = () => $('ioshelp').remove();
+    };
+  }
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
   // Start: ?city= or ?lat=&lon= in the URL, else the last choice, else Malmö

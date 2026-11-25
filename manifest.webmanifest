@@ -1,12 +1,12 @@
 {
   "name": "Weather forecast",
   "short_name": "Weather",
-  "description": "Today's and tomorrow's weather for any city or any place on the world map.",
+  "description": "7-day weather forecast for any city or any place on the world map.",
   "id": "./",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#f4f4f2",
   "theme_color": "#2a78d6",
   "icons": [
