@@ -1,10 +1,11 @@
 // Service worker: makes the app installable and lets it open offline.
 // App files: cache first (updated in the background). Weather data: network first, last answer as offline fallback.
 // Map tiles are not cached (tile providers discourage bulk caching).
-const VERSION = 'weather-v6';
+const VERSION = 'weather-v7';
 const SHELL = [
   './', './index.html', './manifest.webmanifest',
-  './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png', './icons/favicon-32.png',
+  './icons/icon-v2-192.png', './icons/icon-v2-512.png', './icons/icon-v2-maskable-192.png', './icons/icon-v2-maskable-512.png',
+  './icons/apple-touch-icon-v2.png', './icons/favicon-v2-32.png',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
 ];
 
